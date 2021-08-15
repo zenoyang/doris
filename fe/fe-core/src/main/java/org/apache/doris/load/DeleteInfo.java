@@ -35,7 +35,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class DeleteInfo implements Writable, GsonPostProcessable {
+public class DeleteInfo implements Writable, GsonPostProcessable, Comparable<DeleteInfo> {
 
     @SerializedName(value = "dbId")
     private long dbId;
@@ -174,5 +174,10 @@ public class DeleteInfo implements Writable, GsonPostProcessable {
             this.partitionIds = Lists.newArrayList(this.partitionId);
             this.partitionNames = Lists.newArrayList(this.partitionName);
         }
+    }
+
+    @Override
+    public int compareTo(DeleteInfo info) {
+        return (int) (this.createTimeMs - info.createTimeMs); // asc
     }
 }

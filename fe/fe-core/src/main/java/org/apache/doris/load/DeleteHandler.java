@@ -17,6 +17,7 @@
 
 package org.apache.doris.load;
 
+import com.google.common.collect.Queues;
 import org.apache.doris.analysis.BinaryPredicate;
 import org.apache.doris.analysis.DateLiteral;
 import org.apache.doris.analysis.DeleteStmt;
@@ -92,6 +93,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -105,7 +107,7 @@ public class DeleteHandler implements Writable {
 
     // Db -> DeleteInfo list
     @SerializedName(value = "dbToDeleteInfos")
-    private Map<Long, List<DeleteInfo>> dbToDeleteInfos;
+    private Map<Long, Queue<DeleteInfo>> dbToDeleteInfos;
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
@@ -429,10 +431,11 @@ public class DeleteHandler implements Writable {
             long dbId = job.getDeleteInfo().getDbId();
             LOG.info("record finished deleteJob, transactionId {}, dbId {}",
                     job.getTransactionId(), dbId);
-            dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
-            List<DeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-            synchronized (deleteInfoList) {
-                deleteInfoList.add(job.getDeleteInfo());
+            dbToDeleteInfos.putIfAbsent(dbId, Queues.newPriorityQueue());
+            Queue<DeleteInfo> deleteInfoQueue = dbToDeleteInfos.get(dbId);
+            synchronized (deleteInfoQueue) {
+                deleteInfoQueue.add(job.getDeleteInfo());
+                removeOldDeleteInfos(deleteInfoQueue);
             }
         }
     }
@@ -657,12 +660,12 @@ public class DeleteHandler implements Writable {
         }
 
         String dbName = db.getFullName();
-        List<DeleteInfo> deleteInfos = dbToDeleteInfos.get(dbId);
-        if (deleteInfos == null) {
+        Queue<DeleteInfo> deleteInfoQueue = dbToDeleteInfos.get(dbId);
+        if (deleteInfoQueue == null) {
             return infos;
         }
 
-        for (DeleteInfo deleteInfo : deleteInfos) {
+        for (DeleteInfo deleteInfo : deleteInfoQueue) {
             if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
                     deleteInfo.getTableName(),
                     PrivPredicate.LOAD)) {
@@ -694,10 +697,11 @@ public class DeleteHandler implements Writable {
         // add to deleteInfos
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
-        dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
-        List<DeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-        synchronized (deleteInfoList) {
-            deleteInfoList.add(deleteInfo);
+        dbToDeleteInfos.putIfAbsent(dbId, Queues.newPriorityQueue());
+        Queue<DeleteInfo> deleteInfoQueue = dbToDeleteInfos.get(dbId);
+        synchronized (deleteInfoQueue) {
+            deleteInfoQueue.add(deleteInfo);
+            removeOldDeleteInfos(deleteInfoQueue);
         }
     }
 
@@ -710,5 +714,17 @@ public class DeleteHandler implements Writable {
     public static DeleteHandler read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
+    }
+
+    private void removeOldDeleteInfos(Queue<DeleteInfo> deleteInfoQueue) {
+        if (deleteInfoQueue == null) {
+            return;
+        }
+        long currentTimeMs = System.currentTimeMillis();
+
+        while (deleteInfoQueue.peek() != null
+                && (currentTimeMs - deleteInfoQueue.peek().getCreateTimeMs()) / 1000 > Config.label_keep_max_second) {
+            deleteInfoQueue.poll();
+        }
     }
 }
