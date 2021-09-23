@@ -257,4 +257,10 @@ public class View extends Table {
         originalViewDef = "";
         inlineViewDef = Text.readString(in);
     }
+
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(").append(queryStmt.toSql()).append(")");
+        return sb.toString();
+    }
 }

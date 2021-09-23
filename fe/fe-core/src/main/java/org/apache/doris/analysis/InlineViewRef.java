@@ -425,9 +425,7 @@ public class InlineViewRef extends TableRef {
         String alias = getExplicitAlias();
         if (alias != null) aliasSql = ToSqlUtils.getIdentSql(alias);
         if (view != null) {
-            // TODO(zc):
-            // return view_.toSql() + (aliasSql == null ? "" : " " + aliasSql);
-            return name.toSql() + (aliasSql == null ? "" : " " + aliasSql);
+            return view.toSql() + (aliasSql == null ? "" : " " + aliasSql);
         }
 
         StringBuilder sb = new StringBuilder()
