@@ -18,6 +18,7 @@
 package org.apache.doris.qe;
 
 import org.apache.doris.analysis.Analyzer;
+import org.apache.doris.analysis.CreateViewStmt;
 import org.apache.doris.analysis.SelectStmt;
 import org.apache.doris.analysis.SqlParser;
 import org.apache.doris.analysis.SqlScanner;
@@ -38,6 +39,7 @@ import org.apache.doris.catalog.RandomDistributionInfo;
 import org.apache.doris.catalog.RangePartitionInfo;
 import org.apache.doris.catalog.ScalarType;
 import org.apache.doris.catalog.Type;
+import org.apache.doris.catalog.View;
 import org.apache.doris.common.AnalysisException;
 import org.apache.doris.common.Config;
 import org.apache.doris.common.UserException;
@@ -60,6 +62,7 @@ import org.apache.doris.qe.cache.CacheCoordinator;
 import org.apache.doris.qe.cache.PartitionCache;
 import org.apache.doris.qe.cache.PartitionRange;
 import org.apache.doris.qe.cache.RowBatchBuilder;
+import org.apache.doris.qe.cache.SqlCache;
 import org.apache.doris.service.FrontendOptions;
 import org.apache.doris.system.Backend;
 import org.apache.doris.system.SystemInfoService;
@@ -68,6 +71,7 @@ import org.apache.doris.thrift.TUniqueId;
 
 import com.google.common.collect.Lists;
 
+import org.apache.doris.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -149,9 +153,14 @@ public class PartitionCacheTest {
         OlapTable tbl1 = createOrderTable();
         OlapTable tbl2 = createProfileTable();
         OlapTable tbl3 = createEventTable();
+
+//        String createView1 = "create view view1 as (select * from appevent)";
+//        View view1 = createView(createView1);
+
         db.createTable(tbl1);
         db.createTable(tbl2);
         db.createTable(tbl3);
+//        db.createTable(view1);
 
         new Expectations(catalog) {
             {
@@ -389,6 +398,37 @@ public class PartitionCacheTest {
         table.addPartition(part15);
 
         return table;
+    }
+
+    private View createView(String sql) {
+        Catalog.getCurrentSystemInfo();
+
+        CreateViewStmt createViewStmt = null;
+        try {
+            createViewStmt = (CreateViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        } catch (Exception e) {
+            LOG.warn("failed to parse and analyze stmt: {}", sql);
+            e.printStackTrace();
+        }
+
+        List<Column> columns = createViewStmt.getColumns();
+
+        long tableId = Catalog.getCurrentCatalog().getNextId();
+        View view = new View(tableId, tableName, columns);
+        view.setComment(createViewStmt.getComment());
+        view.setInlineViewDefWithSqlMode(createViewStmt.getInlineViewDef(),
+                ConnectContext.get().getSessionVariable().getSqlMode());
+
+        try {
+            view.init();
+        } catch (UserException e) {
+            LOG.warn("failed to init view stmt. {}", e.toString());
+            Assert.fail(e.getMessage());
+        }
+
+
+
+        return view;
     }
 
     private ScanNode createEventScanNode(){
@@ -868,5 +908,48 @@ public class PartitionCacheTest {
             Assert.fail(e.getMessage());
         }
     }
+
+    // TODO(zeno) 测试 sql_key: 1 测试普通sql， 2 测试local view， 3 测试view
+
+    @Test
+    public void testSqlKeyNormal() {
+        Catalog.getCurrentSystemInfo();
+        StatementBase parseStmt = parseSql("SELECT eventdate, COUNT(userid) FROM appevent WHERE " +
+                "eventdate>=\"2020-01-12\" and eventdate<=\"2020-01-14\" GROUP BY eventdate");
+        List<ScanNode> scanNodes = Lists.newArrayList(createEventScanNode());
+        CacheAnalyzer ca = new CacheAnalyzer(context, parseStmt, scanNodes);
+        ca.checkCacheMode(4102415999000L); // 2099-12-31 23:59:59
+        try {
+            SqlCache cache = (SqlCache) ca.getCache();
+            String sqlWithViewStmt = cache.getSqlWithViewStmt();
+            LOG.warn(sqlWithViewStmt);
+            System.out.println(sqlWithViewStmt);
+            Assert.assertTrue(sqlWithViewStmt.equals("SELECT eventdate, COUNT(userid) FROM appevent WHERE " +
+                    "eventdate>=\"2020-01-12\" and eventdate<=\"2020-01-14\" GROUP BY eventdate"));
+
+        } catch (Exception e) {
+            LOG.warn("ex={}", e);
+            Assert.fail(e.getMessage());
+        }
+    }
+
+//    @Test
+//    public void testViewSqlKey() throws Exception {
+//        Catalog.getCurrentSystemInfo();
+//        StatementBase parseStmt = parseSql("select * from view1");
+//        List<ScanNode> scanNodes = Lists.newArrayList(createEventScanNode());
+//        CacheAnalyzer ca = new CacheAnalyzer(context, parseStmt, scanNodes);
+//        ca.checkCacheMode(4102415999000L); // 2099-12-31 23:59:59
+//        try {
+//            SqlCache cache = (SqlCache) ca.getCache();
+//            String sqlWithViewStmt = cache.getSqlWithViewStmt();
+//            LOG.warn(sqlWithViewStmt);
+//            System.out.println("### " + sqlWithViewStmt);
+//
+//        } catch (Exception e) {
+//            LOG.warn("ex={}", e);
+//            Assert.fail(e.getMessage());
+//        }
+//    }
 }
 
