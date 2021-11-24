@@ -110,4 +110,14 @@ public class SqlParserUtils {
         statementBase.analyze(analyzer);
         return statementBase;
     }
+
+    public static String removeCommentInSql(String sql) {
+        // match two patterns, one is "-- comment", the other is "/* comment */"
+        try {
+            return new CommentParser(sql).Input().trim();
+        } catch (ParseException e) {
+            LOG.error("Failed to parse sql: %s %s", sql, e);
+            return sql;
+        }
+    }
 }

@@ -985,7 +985,26 @@ under the License.
                         </lifecycleMappingMetadata>
                     </configuration>
                 </plugin>
-
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>javacc-maven-plugin</artifactId>
+                    <version>2.6</version>
+                    <executions>
+                        <execution>
+                            <id>javacc</id>
+                            <goals>
+                                <goal>javacc</goal>
+                            </goals>
+                            <configuration>
+                                <sourceDirectory>src/main/javacc</sourceDirectory>
+                                <includes>
+                                    <include>*.jj</include>
+                                </includes>
+                                <isStatic>false</isStatic>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
 
