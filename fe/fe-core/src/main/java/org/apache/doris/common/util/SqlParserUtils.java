@@ -110,4 +110,17 @@ public class SqlParserUtils {
         statementBase.analyze(analyzer);
         return statementBase;
     }
+
+    public static String removeCommentInSql(String sql) {
+        // match two patterns, one is "-- comment", the other is "/* comment */"
+        final String[] commentPatterns = new String[] { "--(?!.*\\*/).*?[\r\n]", "/\\*(.|\r|\n)*?\\*/" };
+
+        for (int i = 0; i < commentPatterns.length; i++) {
+            sql = sql.replaceAll(commentPatterns[i], "");
+        }
+
+        sql = sql.trim();
+
+        return sql;
+    }
 }
