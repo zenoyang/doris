@@ -181,6 +181,8 @@ public class ConnectProcessor {
             ctx.getState().setError(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, "Unsupported character set(UTF-8)");
             return;
         }
+
+        originStmt = SqlParserUtils.removeCommentInSql(originStmt);
         String sqlHash = DigestUtils.md5Hex(originStmt);
         ctx.setSqlHash(sqlHash);
         try {

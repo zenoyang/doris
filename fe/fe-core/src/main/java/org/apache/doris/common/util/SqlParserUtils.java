@@ -110,4 +110,8 @@ public class SqlParserUtils {
         statementBase.analyze(analyzer);
         return statementBase;
     }
+
+    public static String removeCommentInSql(String sql) {
+        return new SqlCommentParser(sql).removeCommentSql();
+    }
 }
