@@ -33,11 +33,11 @@ int Minidump::_signo = SIGUSR1;
 std::unique_ptr<google_breakpad::ExceptionHandler> Minidump::_error_handler = nullptr;
 
 // Save the absolute path and create_time of a minidump file
-struct FileStat {
+struct FileStatus {
     std::string abs_path;
     time_t create_time;
 
-    FileStat(const std::string& path_, time_t ctime)
+    FileStatus(const std::string& path_, time_t ctime)
         : abs_path(path_), create_time(ctime) {}
 };
 
@@ -134,7 +134,7 @@ void Minidump::_clean_old_minidump() {
 
         // check file create time and sort and save in stats
         int ret = 0;
-        std::vector<FileStat> stats;
+        std::vector<FileStatus> stats;
         for (auto it = files.begin(); it != files.end(); ++it) {
             std::string path = config::minidump_dir + "/" + *it;
             
@@ -149,7 +149,7 @@ void Minidump::_clean_old_minidump() {
         }
 
         // sort file by ctime ascending
-        std::sort(stats.begin(), stats.end(), [](const FileStat& f1, const FileStat& f2) {
+        std::sort(stats.begin(), stats.end(), [](const FileStatus& f1, const FileStatus& f2) {
             if (f1.create_time > f2.create_time) {
                 return false;
             } else {

@@ -49,7 +49,7 @@
             doris_udf::FunctionContext* ctx,                                                       \
             doris_udf::FunctionContext::FunctionStateScope scope);
 
-namespace doris {
+namespace doris::v2 {
 
 /// Predicate for evaluating expressions of the form "val [NOT] IN (x1, x2, x3...)".
 //
@@ -343,6 +343,6 @@ private:
                               const T* args);
 };
 
-} // namespace doris
+} // namespace doris::v2
 
 #endif

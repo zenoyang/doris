@@ -250,7 +250,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     StringFunctions::init();
     ArrayFunctions::init();
     CastFunctions::init();
-    InPredicate::init();
+    v2::InPredicate::init();
     MathFunctions::init();
     EncryptionFunctions::init();
     TimestampFunctions::init();
