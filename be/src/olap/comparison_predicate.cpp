@@ -21,6 +21,7 @@
 #include "olap/schema.h"
 #include "runtime/string_value.hpp"
 #include "runtime/vectorized_row_batch.h"
+#include "vec/columns/column_dictionary.h"
 #include "vec/columns/column_nullable.h"
 #include "vec/columns/column_vector.h"
 #include "vec/columns/predicate_column.h"
@@ -145,11 +146,14 @@ COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(LessEqualPredicate, <=)
 COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterPredicate, >)
 COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterEqualPredicate, >=)
 
+// todo(zeno) current only support EqualPredicate, 1. support other predicate 2. support nullable
 #define COMPARISON_PRED_COLUMN_EVALUATE(CLASS, OP)                                                                                                    \
     template <class type>                                                                                                                             \
     void CLASS<type>::evaluate(vectorized::IColumn& column, uint16_t* sel, uint16_t* size) const {                                                    \
+        LOG(INFO) << "[zeno] EqualPredicate start size: " << *size;                                                                                   \
         uint16_t new_size = 0;                                                                                                                        \
-        if (column.is_nullable()) {                                           \
+        if (column.is_nullable()) {                                                                                                                   \
+            LOG(INFO) << "[zeno] EqualPredicate is_nullable";                                                                                         \
             auto* nullable_column = vectorized::check_and_get_column<vectorized::ColumnNullable>(column);\
             auto& null_bitmap = reinterpret_cast<const vectorized::ColumnVector<uint8_t>&>(*(nullable_column->get_null_map_column_ptr())).get_data(); \
             auto* nest_column_vector = vectorized::check_and_get_column<vectorized::PredicateColumnType<type>>(nullable_column->get_nested_column());\
@@ -162,7 +166,24 @@ COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterEqualPredicate, >=)
                     new_size += _opposite ? !ret : ret;                                                                                               \
             }                                                                                                                                     \
             *size = new_size;                                                                                                                   \
+        } else if (column.is_column_dict()) {                                                                                                         \
+            LOG(INFO) << "[zeno] EqualPredicate is_column_dict";                                                                                      \
+            if constexpr (std::is_same_v<type, StringValue>) {                                                                                        \
+                auto& dict_col = reinterpret_cast<vectorized::ColumnDictionary&>(column);                                                             \
+                auto& data_array = dict_col.get_data();                                                                                               \
+                auto index = dict_col.get_index(_value);                                                                                              \
+                LOG(INFO) << "[zeno] EqualPredicate is_column_dict index: " << index << " _value: " << _value.to_string();                            \
+                for (uint16_t i = 0; i < *size; ++i) {                                                                                                \
+                    uint16_t idx = sel[i];                                                                                                            \
+                    sel[new_size] = idx;                                                                                                              \
+                    const auto& cell_value = reinterpret_cast<const vectorized::Int32&>(data_array[idx]);                                             \
+                    bool ret = cell_value OP index;                                                                                                   \
+                    new_size += _opposite ? !ret : ret;                                                                                               \
+                }                                                                                                                                     \
+                *size = new_size;                                                                                                                     \
+            }                                                                                                                                         \
         } else {\
+            LOG(INFO) << "[zeno] EqualPredicate is_pred_col";                                                                                         \
             auto& pred_column_ref = reinterpret_cast<vectorized::PredicateColumnType<type>&>(column);\
             auto& data_array = pred_column_ref.get_data();                                                                                             \
             for (uint16_t i = 0; i < *size; i++) {                                                                                                    \

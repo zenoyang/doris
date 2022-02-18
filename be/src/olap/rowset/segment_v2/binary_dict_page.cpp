@@ -21,6 +21,7 @@
 #include "gutil/strings/substitute.h" // for Substitute
 #include "runtime/mem_pool.h"
 #include "util/slice.h" // for Slice
+#include "vec/columns/column_dictionary.h"
 #include "vec/columns/column_vector.h"
 #include "vec/columns/column_string.h"
 #include "vec/columns/column_nullable.h"
@@ -242,6 +243,15 @@ void BinaryDictPageDecoder::set_dict_decoder(PageDecoder* dict_decoder, uint32_t
 
 Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr &dst) {
     if (_encoding_type == PLAIN_ENCODING) {
+        // todo(zeno) log clean
+        LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING";
+
+        if (dst->is_column_dict()) {
+            // todo(zeno) log cleansdaf
+            LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING is_column_dict";
+            auto* dict_col_ptr = reinterpret_cast<vectorized::ColumnDictionary*>(dst.get());
+            dst = (*std::move(dict_col_ptr->convert_to_predicate_column())).assume_mutable();
+        }
         return _data_page_decoder->next_batch(n, dst);
     }
     // dictionary encoding
@@ -256,11 +266,11 @@ Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr
     size_t max_fetch = std::min(*n, static_cast<size_t>(_bit_shuffle_ptr->_num_elements - _bit_shuffle_ptr->_cur_index));
     *n = max_fetch;
  
-    const int32_t* data_array = reinterpret_cast<const int32_t*>(_bit_shuffle_ptr->_chunk.data);
+    const auto* data_array = reinterpret_cast<const int32_t*>(_bit_shuffle_ptr->_chunk.data);
     size_t start_index = _bit_shuffle_ptr->_cur_index;
 
     dst->insert_many_dict_data(data_array, start_index, _start_offset_array, _len_array, 
-        _dict_decoder->_data.mutable_data(), max_fetch);
+        _dict_decoder->_data.mutable_data(), max_fetch, _dict_decoder->_num_elems);
     _bit_shuffle_ptr->_cur_index += max_fetch;
  
     return Status::OK();
