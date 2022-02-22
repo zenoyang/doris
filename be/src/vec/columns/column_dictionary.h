@@ -51,8 +51,8 @@ namespace doris::vectorized {
  * used to keep column with dict in storage layer
  * todo(zeno) desc
  */
-// template <typename T> todo(zeno)
-class ColumnDictionary final : public COWHelper<IColumn, ColumnDictionary> {
+template <typename T>
+class ColumnDictionary final : public COWHelper<IColumn, ColumnDictionary<T>> {
 private:
     friend class COWHelper<IColumn, ColumnDictionary>;
 
@@ -62,20 +62,20 @@ private:
 
 public:
     using Self = ColumnDictionary;
-    using value_type = vectorized::Int32;   // todo(zeno) using value_type = T;
+    using value_type = T;
     using Container = PaddedPODArray<value_type>;
 
     bool is_numeric() const override { return false; }
 
     bool is_predicate_column() const override { return false; }
 
-    bool is_column_dict() const override { return true; }
+    bool is_column_dictionary() const override { return true; }
 
     size_t size() const override {
         return indices.size();
     }
 
-    StringRef get_data_at(size_t n) const override {
+    [[noreturn]] StringRef get_data_at(size_t n) const override {
         LOG(FATAL) << "get_data_at not supported in ColumnDictionary";
     }
 
@@ -100,10 +100,10 @@ public:
     }
 
     void insert_data(const char* pos, size_t /*length*/) override {
-        indices.push_back(unaligned_load<value_type>(pos));
+        indices.push_back(unaligned_load<T>(pos));
     }
 
-    void insert_data(const value_type value) { indices.push_back(value); }
+    void insert_data(const T value) { indices.push_back(value); }
 
     void insert_default() override {
         // todo(zeno) impl default
@@ -206,7 +206,7 @@ public:
 
     bool is_fixed_and_contiguous() const override { return true; }
 
-    size_t size_of_value_if_fixed() const override { return sizeof(value_type); }
+    size_t size_of_value_if_fixed() const override { return sizeof(T); }
 
     [[noreturn]] StringRef get_raw_data() const override {
         LOG(FATAL) << "get_raw_data not supported in ColumnDictionary";
@@ -247,7 +247,7 @@ public:
         auto* res_col = reinterpret_cast<vectorized::ColumnString*>(col_ptr);
         for (size_t i = 0; i < sel_size; i++) {
             uint16_t n = sel[i];
-            auto& index = reinterpret_cast<value_type&>(indices[n]);
+            auto& index = reinterpret_cast<T&>(indices[n]);
             auto* word = dict.get_value(index);
             res_col->insert_data(word->ptr, word->len);
         }
@@ -292,7 +292,7 @@ public:
         LOG(INFO) << "[zeno] ColumnDictionary::convert_to_predicate_column indices.size: " << indices.size();
         auto res = vectorized::PredicateColumnType<StringValue>::create();
         for (size_t i = 0; i < indices.size(); ++i) {
-            auto& index = reinterpret_cast<value_type&>(indices[i]);
+            auto& index = reinterpret_cast<T&>(indices[i]);
             auto* word = dict.get_value(index);
             res->insert_data(word->ptr, word->len);
         }
@@ -300,7 +300,7 @@ public:
         return res;
     }
 
-    value_type get_index(const StringValue& word) {
+    T get_index(const StringValue& word) const {
         return dict.get_index(word);
     }
 
@@ -324,7 +324,7 @@ public:
             LOG(INFO) << "[zeno] Dictionary::insert_value size: " << dict_data.size() << " " << inverted_index.size();
         }
 
-        value_type get_index(const StringValue& word) {
+        T get_index(const StringValue& word) const {
             // todo(zeno) log clean
             LOG(INFO) << "[zeno] Dictionary::get_index word: " << word.to_string();
             auto it = inverted_index.find(word);
@@ -334,7 +334,7 @@ public:
             return -1;  // todo(zeno)
         }
 
-        StringValue* get_value(value_type code) {
+        StringValue* get_value(T code) {
             // todo(zeno) log clean
             LOG(INFO) << "[zeno] Dictionary::get_value code: " << code;
             return &dict_data[code];
@@ -349,7 +349,7 @@ public:
 
     private:
         PaddedPODArray<StringValue> dict_data;
-        std::unordered_map<StringValue, value_type> inverted_index;
+        std::unordered_map<StringValue, T> inverted_index;
     };
 
 private:

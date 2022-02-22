@@ -841,7 +841,7 @@ void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_
         auto& short_cir_column = _current_return_columns[column_id];
         // todo(zeno) log clean
         LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate column_id: "
-                  << column_id << " size: " << *selected_size_ptr << " is_dict_col: " << short_cir_column->is_column_dict();
+                  << column_id << " size: " << *selected_size_ptr << " is_dict_col: " << short_cir_column->is_column_dictionary();
         column_predicate->evaluate(*short_cir_column, vec_sel_rowid_idx, selected_size_ptr);
     }
 
@@ -883,7 +883,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
                 _current_return_columns[cid] = Schema::get_predicate_column_nullable_ptr(column_desc->type(), column_desc->is_nullable());
                 _current_return_columns[cid]->reserve(_opts.block_row_max);
                 // todo(zeno) log clean
-                LOG(INFO) << "[zeno] SegmentIterator::next_batch init _is_pred_column : " << cid << " is_dict_col: " << _current_return_columns[cid]->is_column_dict();
+                LOG(INFO) << "[zeno] SegmentIterator::next_batch init _is_pred_column : " << cid << " is_dict_col: " << _current_return_columns[cid]->is_column_dictionary();
             }
         }
     }

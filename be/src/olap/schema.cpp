@@ -202,7 +202,7 @@ vectorized::IColumn::MutablePtr Schema::get_predicate_column_ptr(FieldType type)
         case OLAP_FIELD_TYPE_CHAR:
         case OLAP_FIELD_TYPE_VARCHAR: 
         case OLAP_FIELD_TYPE_STRING:
-            return doris::vectorized::ColumnDictionary::create();
+            return doris::vectorized::ColumnDictionary<doris::vectorized::Int32>::create();
         
         case OLAP_FIELD_TYPE_DECIMAL:
             return doris::vectorized::PredicateColumnType<decimal12_t>::create();    

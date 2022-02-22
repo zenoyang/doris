@@ -26,6 +26,7 @@
 #include "vec/columns/column_string.h"
 #include "vec/columns/column_nullable.h"
 #include "vec/columns/predicate_column.h"
+#include "vec/columns/column.h"
 
 namespace doris {
 namespace segment_v2 {
@@ -245,12 +246,19 @@ Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr
     if (_encoding_type == PLAIN_ENCODING) {
         // todo(zeno) log clean
         LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING";
+        auto* col_ptr = dst.get();
+        if (dst->is_nullable()) {
+            // todo(zeno) log clean
+            LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING is_nullable";
+            auto nullable_col = reinterpret_cast<vectorized::ColumnNullable*>(dst.get());
+            col_ptr = nullable_col->get_nested_column_ptr().get();
+        }
 
-        if (dst->is_column_dict()) {
-            // todo(zeno) log cleansdaf
+        if (col_ptr->is_column_dictionary()) {
+            // todo(zeno) log clean
             LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING is_column_dict";
-            auto* dict_col_ptr = reinterpret_cast<vectorized::ColumnDictionary*>(dst.get());
-            dst = (*std::move(dict_col_ptr->convert_to_predicate_column())).assume_mutable();
+            auto* dict_col_ptr = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>*>(col_ptr);
+            col_ptr = (*std::move(dict_col_ptr->convert_to_predicate_column())).assume_mutable();
         }
         return _data_page_decoder->next_batch(n, dst);
     }
@@ -274,7 +282,6 @@ Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr
     _bit_shuffle_ptr->_cur_index += max_fetch;
  
     return Status::OK();
- 
 }
 
 Status BinaryDictPageDecoder::next_batch(size_t* n, ColumnBlockView* dst) {
@@ -288,7 +295,7 @@ Status BinaryDictPageDecoder::next_batch(size_t* n, ColumnBlockView* dst) {
     if (PREDICT_FALSE(*n == 0)) {
         return Status::OK();
     }
-    Slice* out = reinterpret_cast<Slice*>(dst->data());
+    auto* out = reinterpret_cast<Slice*>(dst->data());
 
     _batch->resize(*n);
 
