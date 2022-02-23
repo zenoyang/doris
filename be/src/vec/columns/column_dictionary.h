@@ -116,8 +116,8 @@ public:
         indices.clear();
 
         // todo(zeno) need clear dict ?
-        dict.clear();
-        dict_inited = false;
+//        dict.clear();
+//        dict_inited = false;
     }
 
     size_t byte_size() const override {
@@ -266,7 +266,7 @@ public:
                                const uint32_t* len_array, char* dict_data, size_t data_num, uint32_t dict_num) override {
         if (!is_dict_inited()) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data init_dict, dict_num" << dict_num;
+            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data init_dict, dict_num: " << dict_num;
             dict.reserve(dict_num);
             for (uint32_t i = 0; i < dict_num; ++i) {
                 uint32_t start_offset = start_offset_array[i];
@@ -275,6 +275,8 @@ public:
                 dict.insert_value(&sv);
             }
             dict_inited = true;
+        } else {    // todo(zeno) for debug
+            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data not need init_dict";
         }
 
         // todo(zeno) log clean
@@ -317,16 +319,16 @@ public:
 
         inline void insert_value(StringValue* word) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] Dictionary::insert_value word: " << word->to_string();
+//            LOG(INFO) << "[zeno] Dictionary::insert_value word: " << word->to_string();
             dict_data.push_back_without_reserve(*word);
             inverted_index[*word] = inverted_index.size();
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] Dictionary::insert_value size: " << dict_data.size() << " " << inverted_index.size();
+//            LOG(INFO) << "[zeno] Dictionary::insert_value size: " << dict_data.size() << " " << inverted_index.size();
         }
 
         T get_index(const StringValue& word) const {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] Dictionary::get_index word: " << word.to_string();
+//            LOG(INFO) << "[zeno] Dictionary::get_index word: " << word.to_string();
             auto it = inverted_index.find(word);
             if (it != inverted_index.end()) {
                 return it->second;
@@ -336,7 +338,7 @@ public:
 
         StringValue* get_value(T code) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] Dictionary::get_value code: " << code;
+//            LOG(INFO) << "[zeno] Dictionary::get_value code: " << code;
             return &dict_data[code];
         }
 
