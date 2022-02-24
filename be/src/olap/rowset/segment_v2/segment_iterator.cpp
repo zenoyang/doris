@@ -754,7 +754,7 @@ Status SegmentIterator::_output_column_by_sel_idx(vectorized::Block* block, cons
         uint16_t* sel_rowid_idx, uint16_t select_size, bool is_block_mem_reuse) {
     for (auto cid : columnIds) {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] SegmentIterator::_output_column_by_sel_idx cid: " << cid;
+//        LOG(INFO) << "[zeno] SegmentIterator::_output_column_by_sel_idx cid: " << cid;
         int block_cid = _schema_block_id_map[cid];
         RETURN_IF_ERROR(block->copy_column_data_to_block(is_block_mem_reuse, 
             _current_return_columns[cid].get(), sel_rowid_idx, select_size, block_cid, _opts.block_row_max));
@@ -832,7 +832,7 @@ void SegmentIterator::_evaluate_vectorization_predicate(uint16_t* sel_rowid_idx,
 void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_idx, uint16_t* selected_size_ptr) {
     if (_short_cir_pred_column_ids.empty()) {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate empty";
+//        LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate empty";
         return;
     }
 
@@ -840,8 +840,8 @@ void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_
         auto column_id = column_predicate->column_id();
         auto& short_cir_column = _current_return_columns[column_id];
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate column_id: "
-                  << column_id << " size: " << *selected_size_ptr << " is_dict_col: " << short_cir_column->is_column_dictionary();
+//        LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate column_id: "
+//                  << column_id << " size: " << *selected_size_ptr << " is_dict_col: " << short_cir_column->is_column_dictionary();
         column_predicate->evaluate(*short_cir_column, vec_sel_rowid_idx, selected_size_ptr);
     }
 
@@ -867,7 +867,7 @@ void SegmentIterator::_read_columns_by_rowids(std::vector<ColumnId>& read_column
 Status SegmentIterator::next_batch(vectorized::Block* block) {
     bool is_mem_reuse = block->mem_reuse();
     // todo(zeno) log clean
-    LOG(INFO) << "[zeno] SegmentIterator::next_batch is_mem_reuse: " << is_mem_reuse;
+//    LOG(INFO) << "[zeno] SegmentIterator::next_batch is_mem_reuse: " << is_mem_reuse;
     SCOPED_RAW_TIMER(&_opts.stats->block_load_ns);
     if (UNLIKELY(!_inited)) {
         RETURN_IF_ERROR(_init(true));
@@ -883,7 +883,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
                 _current_return_columns[cid] = Schema::get_predicate_column_nullable_ptr(column_desc->type(), column_desc->is_nullable());
                 _current_return_columns[cid]->reserve(_opts.block_row_max);
                 // todo(zeno) log clean
-                LOG(INFO) << "[zeno] SegmentIterator::next_batch init _is_pred_column : " << cid << " is_dict_col: " << _current_return_columns[cid]->is_column_dictionary();
+//                LOG(INFO) << "[zeno] SegmentIterator::next_batch init _is_pred_column : " << cid << " is_dict_col: " << _current_return_columns[cid]->is_column_dictionary();
             }
         }
     }
@@ -899,7 +899,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
 
     if (nrows_read == 0) {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] SegmentIterator::next_batch no more data in segment";
+//        LOG(INFO) << "[zeno] SegmentIterator::next_batch no more data in segment";
         for (int i = 0; i < _schema.num_column_ids(); i++) {
             auto cid = _schema.column_id(i);
             // todo(wb) abstract make column where
@@ -923,7 +923,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
     // when no predicate(include delete condition) is provided, output column directly
     if (_vec_pred_column_ids.empty() && _short_cir_pred_column_ids.empty()) {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] SegmentIterator::next_batch no predicate, output column directly";
+//        LOG(INFO) << "[zeno] SegmentIterator::next_batch no predicate, output column directly";
         _output_non_pred_columns(block, is_mem_reuse);
     } else { // need predicate evaluation
         uint16_t selected_size = nrows_read;
@@ -936,7 +936,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
         // So output block directly after vectorization evaluation
         if (_is_all_column_basic_type) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] SegmentIterator::next_batch _is_all_column_basic_type";
+//            LOG(INFO) << "[zeno] SegmentIterator::next_batch _is_all_column_basic_type";
             return _output_column_by_sel_idx(block, _first_read_column_ids, sel_rowid_idx, selected_size, is_mem_reuse);
         }
 
@@ -949,7 +949,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
         // step3: read non_predicate column
         if (!_non_predicate_columns.empty()) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] SegmentIterator::next_batch read non_predicate column, selected_size: " << selected_size;
+//            LOG(INFO) << "[zeno] SegmentIterator::next_batch read non_predicate column, selected_size: " << selected_size;
             _read_columns_by_rowids(_non_predicate_columns, _block_rowids, sel_rowid_idx, selected_size, &_current_return_columns);
         }
 
@@ -964,7 +964,7 @@ Status SegmentIterator::next_batch(vectorized::Block* block) {
     }
 
     // todo(zeno) log clean
-    LOG(INFO) << "[zeno] SegmentIterator::next_batch end";
+//    LOG(INFO) << "[zeno] SegmentIterator::next_batch end";
 
     return Status::OK();
 }

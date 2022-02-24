@@ -134,7 +134,6 @@ void BinaryDictPageBuilder::reset() {
     } else {
         _data_page_builder->reset();
     }
-    _finished = false;
 }
 
 size_t BinaryDictPageBuilder::count() const {
@@ -245,7 +244,7 @@ void BinaryDictPageDecoder::set_dict_decoder(PageDecoder* dict_decoder, uint32_t
 Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr &dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING";
+//        LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING";
         auto* col_ptr = dst.get();
         if (dst->is_nullable()) {
             // todo(zeno) log clean

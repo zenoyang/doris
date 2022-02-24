@@ -150,19 +150,15 @@ COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterEqualPredicate, >=)
 #define COMPARISON_PRED_COLUMN_EVALUATE(CLASS, OP)                                                                                                    \
     template <class type>                                                                                                                             \
     void CLASS<type>::evaluate(vectorized::IColumn& column, uint16_t* sel, uint16_t* size) const {                                                    \
-        LOG(INFO) << "[zeno] ComparisonPredicate start size: " << *size;                                                                              \
         uint16_t new_size = 0;                                                                                                                        \
         if (column.is_nullable()) {                                                                                                                   \
-            LOG(INFO) << "[zeno] ComparisonPredicate is_nullable";                                                                                    \
             auto* nullable_col = vectorized::check_and_get_column<vectorized::ColumnNullable>(column);                                                \
             auto& null_bitmap = reinterpret_cast<const vectorized::ColumnUInt8&>(nullable_col->get_null_map_column()).get_data();                     \
             auto& nested_col = nullable_col->get_nested_column();                                                                                     \
-            LOG(INFO) << "[zeno] ComparisonPredicate is_column_dict: " << nested_col.is_column_dictionary();                                          \
             if (nested_col.is_column_dictionary()) {                                                                                                  \
                 if constexpr (std::is_same_v<type, StringValue>) {                                                                                    \
                     auto* nested_col_ptr = vectorized::check_and_get_column<vectorized::ColumnDictionary<vectorized::Int32>>(nested_col);             \
                     auto index = nested_col_ptr->get_index(_value);                                                                                   \
-                    LOG(INFO) << "[zeno] ComparisonPredicate index: " << index << " _value: " << _value.to_string();                                  \
                     auto& data_array = nested_col_ptr->get_data();                                                                                    \
                     for (uint16_t i = 0; i < *size; i++) {                                                                                            \
                         uint16_t idx = sel[i];                                                                                                        \
@@ -183,15 +179,12 @@ COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterEqualPredicate, >=)
                     new_size += _opposite ? !ret : ret;                                                                                               \
                 }                                                                                                                                     \
             }                                                                                                                                         \
-            LOG(INFO) << "[zeno] ComparisonPredicate new_size: " << new_size;                                                                         \
             *size = new_size;                                                                                                                         \
         } else if (column.is_column_dictionary()) {                                                                                                   \
-            LOG(INFO) << "[zeno] ComparisonPredicate is_column_dict";                                                                                 \
             if constexpr (std::is_same_v<type, StringValue>) {                                                                                        \
                 auto& dict_col = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>&>(column);                                          \
                 auto& data_array = dict_col.get_data();                                                                                               \
                 auto index = dict_col.get_index(_value);                                                                                              \
-                LOG(INFO) << "[zeno] ComparisonPredicate is_column_dict index: " << index << " _value: " << _value.to_string();                       \
                 for (uint16_t i = 0; i < *size; ++i) {                                                                                                \
                     uint16_t idx = sel[i];                                                                                                            \
                     sel[new_size] = idx;                                                                                                              \
@@ -199,11 +192,9 @@ COMPARISON_PRED_COLUMN_BLOCK_EVALUATE(GreaterEqualPredicate, >=)
                     bool ret = cell_value OP index;                                                                                                   \
                     new_size += _opposite ? !ret : ret;                                                                                               \
                 }                                                                                                                                     \
-                LOG(INFO) << "[zeno] ComparisonPredicate new_size: " << new_size;                                                                     \
                 *size = new_size;                                                                                                                     \
             }                                                                                                                                         \
         } else {\
-            LOG(INFO) << "[zeno] EqualPredicate is_pred_col";                                                                                         \
             auto& pred_column_ref = reinterpret_cast<vectorized::PredicateColumnType<type>&>(column);\
             auto& data_array = pred_column_ref.get_data();                                                                                             \
             for (uint16_t i = 0; i < *size; i++) {                                                                                                    \

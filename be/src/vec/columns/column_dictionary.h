@@ -112,7 +112,7 @@ public:
 
     void clear() override {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] ColumnDictionary::clear ...";
+//        LOG(INFO) << "[zeno] ColumnDictionary::clear ... indices size: " << indices.size();
         indices.clear();
 
         // todo(zeno) need clear dict ?
@@ -243,7 +243,7 @@ public:
 
     Status filter_by_selector(const uint16_t* sel, size_t sel_size, IColumn* col_ptr) override {
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] ColumnDictionary::filter_by_selector sel_size " << sel_size;
+//        LOG(INFO) << "[zeno] ColumnDictionary::filter_by_selector sel_size " << sel_size;
         auto* res_col = reinterpret_cast<vectorized::ColumnString*>(col_ptr);
         for (size_t i = 0; i < sel_size; i++) {
             uint16_t n = sel[i];
@@ -275,12 +275,13 @@ public:
                 dict.insert_value(&sv);
             }
             dict_inited = true;
-        } else {    // todo(zeno) for debug
-            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data not need init_dict";
         }
+//        else {    // todo(zeno) for debug
+//            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data not need init_dict";
+//        }
 
         // todo(zeno) log clean
-        LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data insert_data data_num: " << data_num;
+//        LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data insert_data data_num: " << data_num;
         for (int i = 0; i < data_num; i++, start_index++) {
             int32_t codeword = data_array[start_index];
             insert_data(codeword);
@@ -299,6 +300,7 @@ public:
             res->insert_data(word->ptr, word->len);
         }
         // todo(zeno) clear dict col?
+        dict.clear();
         return res;
     }
 
@@ -312,7 +314,7 @@ public:
 
         void reserve(size_t n) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] Dictionary::reserve n: " << n;
+//            LOG(INFO) << "[zeno] Dictionary::reserve n: " << n;
             dict_data.reserve(n);
             inverted_index.reserve(n);
         }
