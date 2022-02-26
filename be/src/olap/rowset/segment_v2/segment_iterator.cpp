@@ -33,6 +33,7 @@
 #include "olap/in_list_predicate.h"
 #include "util/doris_metrics.h"
 #include "util/simd/bits.h"
+#include "vec/columns/column_dictionary.h"
 
 using strings::Substitute;
 
@@ -842,6 +843,11 @@ void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_
         // todo(zeno) log clean
 //        LOG(INFO) << "[zeno] SegmentIterator::_evaluate_short_circuit_predicate column_id: "
 //                  << column_id << " size: " << *selected_size_ptr << " is_dict_col: " << short_cir_column->is_column_dictionary();
+
+        if (short_cir_column->is_column_dictionary() && column_predicate->is_range_comparision_predicate()) {
+            auto& dict_col = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>&>(*short_cir_column);
+            dict_col.sort_dict_and_indices();
+        }
         column_predicate->evaluate(*short_cir_column, vec_sel_rowid_idx, selected_size_ptr);
     }
 

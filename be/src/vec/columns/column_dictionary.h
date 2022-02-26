@@ -263,15 +263,7 @@ public:
                 dict.insert_value(&sv);
             }
             dict_inited = true;
-
-            // todo(zeno) sort test
-            if (!is_dict_sorted()) {
-                sort();
-            }
         }
-//        else {    // todo(zeno) for debug
-//            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data not need init_dict";
-//        }
 
         // todo(zeno) log clean
 //        LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data insert_data data_num: " << data_num;
@@ -285,6 +277,8 @@ public:
 
     bool is_dict_sorted() const { return dict_sorted; }
 
+    bool is_indices_converted() const { return indices_converted; }
+
     ColumnPtr convert_to_predicate_column() {
         // todo(zeno) log clean
         LOG(INFO) << "[zeno] ColumnDictionary::convert_to_predicate_column indices.size: " << indices.size();
@@ -294,7 +288,6 @@ public:
             auto* word = dict.get_value(index);
             res->insert_data(word->ptr, word->len);
         }
-        // todo(zeno) clear dict col?
         dict.clear();
         return res;
     }
@@ -303,7 +296,22 @@ public:
         return dict.get_index(word);
     }
 
-    void sort() {
+    void sort_dict_and_indices() {
+        // todo(zeno) log clean
+        LOG(INFO) << "[zeno] Dictionary::sort_dict_and_indices";
+        if (!is_dict_sorted()) {
+            sort_dict();
+        }
+
+        if (!is_indices_converted()) {
+            for (size_t i = 0; i < size(); ++i) {
+                indices[i] = dict.get_convert_index(indices[i]);
+            }
+            indices_converted = true;
+        }
+    }
+
+    void sort_dict() {
         // todo(zeno) log clean
         LOG(INFO) << "[zeno] Dictionary::sort";
         DictContainer new_dict;
@@ -311,11 +319,7 @@ public:
         StringValue::Comparator comparator;
         std::sort(new_dict.begin(), new_dict.end(), comparator);
         dict.update_inverted_index(new_dict);
-        for (size_t i = 0; i < size(); ++i) {
-            StringValue* value = dict.get_value(i);
-            T index = dict.get_index(*value);
-            indices[i] = index;
-        }
+        dict.update_dict_data(new_dict);
         dict_sorted = true;
     }
 
@@ -334,8 +338,8 @@ public:
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::insert_value word: " << word->to_string();
             dict_data.push_back_without_reserve(*word);
-//            inverted_index[*word] = inverted_index.size();
-            inverted_index.emplace(*word, inverted_index.size());
+            inverted_index[*word] = inverted_index.size();
+//            inverted_index.emplace(*word, inverted_index.size());
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::insert_value size: " << dict_data.size() << " " << inverted_index.size();
         }
@@ -361,36 +365,31 @@ public:
             LOG(INFO) << "[zeno] Dictionary::clear, size: " << dict_data.size() << " " << inverted_index.size();
             dict_data.clear();
             inverted_index.clear();
+            index_convert_map.clear();
         }
 
         void update_inverted_index(DictContainer& new_dict) {
             // todo(zeno) log clean
             LOG(INFO) << "[zeno] Dictionary::update_inverted_index";
             for (size_t i = 0; i < new_dict.size(); ++i) {
-                inverted_index.emplace(new_dict[i], (T)i);
+//                LOG(INFO) << "[zeno] update_inverted_index before: "
+//                          << inverted_index.find(new_dict[i])->first->to_string()
+//                          << " index: " << inverted_index.find(new_dict[i])->second;
+                index_convert_map[inverted_index.find(new_dict[i])->second] = (T)i;
+                inverted_index[new_dict[i]] = (T)i;
+//                LOG(INFO) << "[zeno] update_inverted_index after: "
+//                          << inverted_index.find(new_dict[i])->first->to_string()
+//                          << " index: " << inverted_index.find(new_dict[i])->second;
             }
         }
 
-//        void sort() {
-//            size_t dict_size = dict_data.size();
-//
-//            // copy dict to new_dict
-//            DictContainer new_dict;
-//            new_dict.reserve(dict_size);
-//            for (size_t i = 0; i < dict_size; ++i) {
-//                new_dict.push_back_without_reserve(dict_data[i]);
-//            }
-//
-//            // sort new dict
-//            std::sort(new_dict.begin(), new_dict.end(), comparator);
-//
-//            // update inverted_index;
-//            for (size_t i = 0; i < dict_size; ++i) {
-//                inverted_index.emplace(new_dict[i], (T)i);
-//            }
-//
-//            // update index
-//        }
+        void update_dict_data(DictContainer& new_dict) {
+            // todo(zeno) log clean
+//            LOG(INFO) << "[zeno] Dictionary::update_dict old_dict_size: " << dict_data.size() << " new_dict_size: " << new_dict.size();
+//            LOG(INFO) << "[zeno] Dictionary::update_dict old_dict_0: " << dict_data[0].to_string() << " new_dict_0: " << new_dict[0].to_string();
+            dict_data.clear();
+            dict_data.insert(new_dict.begin(), new_dict.end());
+        }
 
         void replicate(DictContainer& new_dict) {
             // todo(zeno) log clean
@@ -402,6 +401,16 @@ public:
             }
         }
 
+        inline T get_convert_index(const T& index) const {
+            // todo(zeno) log clean
+//            LOG(INFO) << "[zeno] Dictionary::get_convert_index index: " << index;
+            auto it = index_convert_map.find(index);
+            if (it != index_convert_map.end()) {
+                return it->second;
+            }
+            return -1;  // todo(zeno)
+        }
+
     private:
         struct HashOfStringValue {
             size_t operator()(const StringValue& value) const {
@@ -410,12 +419,16 @@ public:
         };
 
         DictContainer dict_data;
+        // dict value -> index
         phmap::flat_hash_map<StringValue, T, HashOfStringValue> inverted_index;
+        // old index -> index
+        phmap::flat_hash_map<T, T> index_convert_map;
     };
 
 private:
     bool dict_inited = false;
     bool dict_sorted = false;
+    bool indices_converted = false;
     Dictionary dict;
     Container indices;
 };
