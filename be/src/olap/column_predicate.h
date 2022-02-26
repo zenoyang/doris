@@ -71,6 +71,9 @@ public:
 
     virtual bool is_in_predicate() { return false; }
 
+    // todo(zeno)
+    virtual bool is_range_comparision_predicate() { return false; }
+
 protected:
     uint32_t _column_id;
     bool _opposite;

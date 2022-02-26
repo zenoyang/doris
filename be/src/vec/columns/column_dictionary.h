@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <parallel_hashmap/phmap.h>
+
+#include "gutil/hash/string_hash.h"
 #include "runtime/string_value.h"
 #include "olap/decimal12.h"
 #include "olap/uint24.h"
@@ -28,22 +31,6 @@
 #include "vec/columns/predicate_column.h"
 #include "vec/core/types.h"
 #include "util/slice.h"
-
-#include <unordered_map>
-
-namespace std {
-template <>
-struct hash<doris::StringValue> {
-    uint64_t operator()(const doris::StringValue& rhs) const { return hash_value(rhs); }
-};
-
-template <>
-struct equal_to<doris::StringValue> {
-    bool operator()(const doris::StringValue& lhs, const doris::StringValue& rhs) const {
-        return lhs == rhs;
-    }
-};
-} // namespace std
 
 namespace doris::vectorized {
 
@@ -64,6 +51,7 @@ public:
     using Self = ColumnDictionary;
     using value_type = T;
     using Container = PaddedPODArray<value_type>;
+    using DictContainer = PaddedPODArray<StringValue>;
 
     bool is_numeric() const override { return false; }
 
@@ -266,7 +254,7 @@ public:
                                const uint32_t* len_array, char* dict_data, size_t data_num, uint32_t dict_num) override {
         if (!is_dict_inited()) {
             // todo(zeno) log clean
-            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data init_dict, dict_num: " << dict_num;
+//            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data init_dict, dict_num: " << dict_num;
             dict.reserve(dict_num);
             for (uint32_t i = 0; i < dict_num; ++i) {
                 uint32_t start_offset = start_offset_array[i];
@@ -275,6 +263,11 @@ public:
                 dict.insert_value(&sv);
             }
             dict_inited = true;
+
+            // todo(zeno) sort test
+            if (!is_dict_sorted()) {
+                sort();
+            }
         }
 //        else {    // todo(zeno) for debug
 //            LOG(INFO) << "[zeno] ColumnDictionary::insert_many_dict_data not need init_dict";
@@ -289,6 +282,8 @@ public:
     }
 
     bool is_dict_inited() const { return dict_inited; }
+
+    bool is_dict_sorted() const { return dict_sorted; }
 
     ColumnPtr convert_to_predicate_column() {
         // todo(zeno) log clean
@@ -308,6 +303,22 @@ public:
         return dict.get_index(word);
     }
 
+    void sort() {
+        // todo(zeno) log clean
+        LOG(INFO) << "[zeno] Dictionary::sort";
+        DictContainer new_dict;
+        dict.replicate(new_dict);
+        StringValue::Comparator comparator;
+        std::sort(new_dict.begin(), new_dict.end(), comparator);
+        dict.update_inverted_index(new_dict);
+        for (size_t i = 0; i < size(); ++i) {
+            StringValue* value = dict.get_value(i);
+            T index = dict.get_index(*value);
+            indices[i] = index;
+        }
+        dict_sorted = true;
+    }
+
     class Dictionary {
     public:
         Dictionary() = default;
@@ -323,12 +334,13 @@ public:
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::insert_value word: " << word->to_string();
             dict_data.push_back_without_reserve(*word);
-            inverted_index[*word] = inverted_index.size();
+//            inverted_index[*word] = inverted_index.size();
+            inverted_index.emplace(*word, inverted_index.size());
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::insert_value size: " << dict_data.size() << " " << inverted_index.size();
         }
 
-        T get_index(const StringValue& word) const {
+        inline T get_index(const StringValue& word) const {
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::get_index word: " << word.to_string();
             auto it = inverted_index.find(word);
@@ -338,7 +350,7 @@ public:
             return -1;  // todo(zeno)
         }
 
-        StringValue* get_value(T code) {
+        inline StringValue* get_value(T code) {
             // todo(zeno) log clean
 //            LOG(INFO) << "[zeno] Dictionary::get_value code: " << code;
             return &dict_data[code];
@@ -351,13 +363,59 @@ public:
             inverted_index.clear();
         }
 
+        void update_inverted_index(DictContainer& new_dict) {
+            // todo(zeno) log clean
+            LOG(INFO) << "[zeno] Dictionary::update_inverted_index";
+            for (size_t i = 0; i < new_dict.size(); ++i) {
+                inverted_index.emplace(new_dict[i], (T)i);
+            }
+        }
+
+//        void sort() {
+//            size_t dict_size = dict_data.size();
+//
+//            // copy dict to new_dict
+//            DictContainer new_dict;
+//            new_dict.reserve(dict_size);
+//            for (size_t i = 0; i < dict_size; ++i) {
+//                new_dict.push_back_without_reserve(dict_data[i]);
+//            }
+//
+//            // sort new dict
+//            std::sort(new_dict.begin(), new_dict.end(), comparator);
+//
+//            // update inverted_index;
+//            for (size_t i = 0; i < dict_size; ++i) {
+//                inverted_index.emplace(new_dict[i], (T)i);
+//            }
+//
+//            // update index
+//        }
+
+        void replicate(DictContainer& new_dict) {
+            // todo(zeno) log clean
+            LOG(INFO) << "[zeno] Dictionary::replicate";
+            size_t size = dict_data.size();
+            new_dict.reserve(size);
+            for (size_t i = 0; i < size; ++i) {
+                new_dict.push_back_without_reserve(dict_data[i]);
+            }
+        }
+
     private:
-        PaddedPODArray<StringValue> dict_data;
-        std::unordered_map<StringValue, T> inverted_index;
+        struct HashOfStringValue {
+            size_t operator()(const StringValue& value) const {
+                return HashStringThoroughly(value.ptr, value.len);
+            }
+        };
+
+        DictContainer dict_data;
+        phmap::flat_hash_map<StringValue, T, HashOfStringValue> inverted_index;
     };
 
 private:
     bool dict_inited = false;
+    bool dict_sorted = false;
     Dictionary dict;
     Container indices;
 };
