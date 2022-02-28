@@ -33,6 +33,7 @@
 #include "olap/short_key_index.h"
 #include "util/doris_metrics.h"
 #include "util/simd/bits.h"
+#include "vec/columns/column_dictionary.h"
 
 using strings::Substitute;
 
@@ -614,9 +615,9 @@ void SegmentIterator::_vec_init_lazy_materialization() {
             pred_column_ids.insert(cid);
 
             // for date type which can not be executed in a vectorized way, using short circuit execution
-            if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_CHAR ||
-                type == OLAP_FIELD_TYPE_DECIMAL || type == OLAP_FIELD_TYPE_DATE ||
-                predicate->is_in_predicate()) {
+            if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_CHAR
+                || type == OLAP_FIELD_TYPE_STRING || type == OLAP_FIELD_TYPE_DECIMAL
+                || type == OLAP_FIELD_TYPE_DATE || predicate->is_in_predicate()) {
                 short_cir_pred_col_id_set.insert(cid);
                 _short_cir_eval_predicate.push_back(predicate);
                 _is_all_column_basic_type = false;
@@ -859,6 +860,11 @@ void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_
     for (auto column_predicate : _short_cir_eval_predicate) {
         auto column_id = column_predicate->column_id();
         auto& short_cir_column = _current_return_columns[column_id];
+        if (short_cir_column->is_column_dictionary()
+            && column_predicate->is_range_comparision_predicate()) {
+            auto& dict_col = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>&>(*short_cir_column);
+            dict_col.sort_dict_and_indices();
+        }
         column_predicate->evaluate(*short_cir_column, vec_sel_rowid_idx, selected_size_ptr);
     }
 
