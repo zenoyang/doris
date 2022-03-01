@@ -243,15 +243,11 @@ Status BinaryDictPageDecoder::next_batch(size_t* n, vectorized::MutableColumnPtr
     if (_encoding_type == PLAIN_ENCODING) {
         auto* col_ptr = dst.get();
         if (dst->is_nullable()) {
-            // todo(zeno) log clean
-            LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING is_nullable";
             auto nullable_col = reinterpret_cast<vectorized::ColumnNullable*>(dst.get());
             col_ptr = nullable_col->get_nested_column_ptr().get();
         }
 
         if (col_ptr->is_column_dictionary()) {
-            // todo(zeno) log clean
-            LOG(INFO) << "[zeno] BinaryDictPageDecoder::next_batch PLAIN_ENCODING is_column_dict";
             auto* dict_col_ptr = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>*>(col_ptr);
             col_ptr = (*std::move(dict_col_ptr->convert_to_predicate_column())).assume_mutable();
         }

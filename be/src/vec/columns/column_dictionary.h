@@ -35,8 +35,12 @@
 namespace doris::vectorized {
 
 /**
- * used to keep column with dict in storage layer
- * todo(zeno) desc
+ * For low cardinality string columns, using ColumnDictionary can reduce memory usage and improve query efficiency.
+ * For equal predicate comparisons, convert the predicate constant to encodings according to the dictionary,
+ * so that encoding comparisons are used instead of string comparisons to improve performance.
+ * For range comparison predicates, it is necessary to sort the dictionary contents, convert the encoding column, and then compare the encoding directly.
+ * If the read data page contains plain-encoded data pages, the dictionary columns are converted into PredicateColumn for processing.
+ * Currently ColumnDictionary is only used for storage layer.
  */
 template <typename T>
 class ColumnDictionary final : public COWHelper<IColumn, ColumnDictionary<T>> {
@@ -94,28 +98,19 @@ public:
     void insert_data(const T value) { codes.push_back(value); }
 
     void insert_default() override {
-        // todo(zeno) impl default
         LOG(FATAL) << "insert_default not supported in ColumnDictionary";
     }
 
     void clear() override {
         codes.clear();
-
-        // todo(zeno) need clear dict ?
-        //        dict.clear();
-        //        dict_inited = false;
     }
 
-    size_t byte_size() const override {
-        //         return data.size() * sizeof(T);
-        // todo(zeno)
-        return -1;
+    [[noreturn]] size_t byte_size() const override {
+        LOG(FATAL) << "byte_size not supported in ColumnDictionary";
     }
 
-    size_t allocated_bytes() const override {
-        //        return byte_size();
-        // todo(zeno)
-        return -1;
+    [[noreturn]] size_t allocated_bytes() const override {
+        LOG(FATAL) << "allocated_bytes not supported in ColumnDictionary";
     }
 
     void protect() override {}
@@ -141,12 +136,12 @@ public:
         LOG(FATAL) << "insert not supported in ColumnDictionary";
     }
 
-    [[noreturn]] Field operator[](size_t n) const override {
-        LOG(FATAL) << "operator[] not supported in ColumnDictionary";
+    Field operator[](size_t n) const override {
+        return codes[n];
     }
 
     void get(size_t n, Field& res) const override {
-        LOG(FATAL) << "get field not supported in ColumnDictionary";
+        res = (*this)[n];
     }
 
     [[noreturn]] UInt64 get64(size_t n) const override {
@@ -167,6 +162,18 @@ public:
 
     [[noreturn]] Int64 get_int(size_t n) const override {
         LOG(FATAL) << "get field not supported in ColumnDictionary";
+    }
+
+    Container& get_data() {
+        return codes;
+    }
+
+    const Container& get_data() const {
+        return codes;
+    }
+
+    T get_code(const StringValue& value) const {
+        return dict.get_code(value);
     }
 
     // it's impossable to use ComplexType as key , so we don't have to implemnt them
@@ -210,14 +217,6 @@ public:
         LOG(FATAL) << "permute not supported in ColumnDictionary";
     };
 
-    Container& get_data() {
-        return codes;
-    }
-
-    const Container& get_data() const {
-        return codes;
-    }
-
     [[noreturn]] ColumnPtr replicate(const IColumn::Offsets& replicate_offsets) const override {
         LOG(FATAL) << "replicate not supported in ColumnDictionary";
     };
@@ -246,20 +245,20 @@ public:
         LOG(FATAL) << "should not call replace_column_data_default in ColumnDictionary";
     }
 
-    void insert_many_dict_data(const int32_t* data_array, size_t start_index, const StringRef* dict_arr,
+    void insert_many_dict_data(const int32_t* data_array, size_t start_index, const StringRef* dict_array,
                                size_t data_num, uint32_t dict_num) override {
         if (!is_dict_inited()) {
             dict.reserve(dict_num);
             for (uint32_t i = 0; i < dict_num; ++i) {
-                auto value = StringValue(dict_arr[i].data, dict_arr[i].size);
+                auto value = StringValue(dict_array[i].data, dict_array[i].size);
                 dict.insert_value(&value);
             }
             dict_inited = true;
         }
 
         for (int i = 0; i < data_num; i++, start_index++) {
-            int32_t codeword = data_array[start_index];
-            insert_data(codeword);
+            int32_t code = data_array[start_index];
+            insert_data(code);
         }
     }
 
@@ -282,10 +281,6 @@ public:
         return res;
     }
 
-    T get_code(const StringValue& value) const {
-        return dict.get_code(value);
-    }
-
     void convert_dict_codes() {
         if (!is_dict_sorted()) {
             sort_dict();
@@ -302,10 +297,8 @@ public:
     void sort_dict() {
         DictContainer new_dict;
         dict.replicate(new_dict);
-        StringValue::Comparator comparator;
         std::sort(new_dict.begin(), new_dict.end(), comparator);
-        dict.update_inverted_index(new_dict);
-        dict.update_dict_data(new_dict);
+        dict.update_inverted_index_and_dict_data(new_dict);
         dict_sorted = true;
     }
 
@@ -340,20 +333,16 @@ public:
         }
 
         void clear() {
-            LOG(INFO) << "[zeno] Dictionary::clear, size: " << dict_data.size() << " " << inverted_index.size();
             dict_data.clear();
             inverted_index.clear();
             code_convert_map.clear();
         }
 
-        void update_inverted_index(DictContainer& new_dict) {
+        void update_inverted_index_and_dict_data(DictContainer& new_dict) {
             for (size_t i = 0; i < new_dict.size(); ++i) {
                 code_convert_map[inverted_index.find(new_dict[i])->second] = (T)i;
                 inverted_index[new_dict[i]] = (T)i;
             }
-        }
-
-        void update_dict_data(DictContainer& new_dict) {
             dict_data.clear();
             dict_data.insert(new_dict.begin(), new_dict.end());
         }
@@ -381,6 +370,7 @@ public:
             }
         };
 
+        // dict code -> dict value
         DictContainer dict_data;
         // dict value -> dict code
         phmap::flat_hash_map<StringValue, T, HashOfStringValue> inverted_index;
@@ -394,6 +384,7 @@ private:
     bool dict_code_converted = false;
     Dictionary dict;
     Container codes;
+    StringValue::Comparator comparator;
 };
 
 } // namespace
