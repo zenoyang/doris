@@ -71,7 +71,7 @@ public:
 
     virtual bool is_in_predicate() { return false; }
 
-    virtual bool is_range_comparision_predicate() { return false; }
+    virtual bool is_range_comparison_predicate() { return false; }
 
 protected:
     uint32_t _column_id;

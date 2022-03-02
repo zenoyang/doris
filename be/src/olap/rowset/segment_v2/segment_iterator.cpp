@@ -864,7 +864,7 @@ void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_
         auto column_id = column_predicate->column_id();
         auto& short_cir_column = _current_return_columns[column_id];
         if (short_cir_column->is_column_dictionary()
-            && column_predicate->is_range_comparision_predicate()) {
+            && column_predicate->is_range_comparison_predicate()) {
             auto& dict_col = reinterpret_cast<vectorized::ColumnDictionary<vectorized::Int32>&>(*short_cir_column);
             dict_col.convert_dict_codes();
         }

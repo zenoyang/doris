@@ -232,8 +232,8 @@ public:
         for (size_t i = 0; i < sel_size; i++) {
             uint16_t n = sel[i];
             auto& code = reinterpret_cast<T&>(codes[n]);
-            auto* value = dict.get_value(code);
-            res_col->insert_data(value->ptr, value->len);
+            auto value = dict.get_value(code);
+            res_col->insert_data(value.ptr, value.len);
         }
         return Status::OK();
     }
@@ -252,7 +252,7 @@ public:
             dict.reserve(dict_num);
             for (uint32_t i = 0; i < dict_num; ++i) {
                 auto value = StringValue(dict_array[i].data, dict_array[i].size);
-                dict.insert_value(&value);
+                dict.insert_value(value);
             }
             dict_inited = true;
         }
@@ -271,11 +271,12 @@ public:
 
     ColumnPtr convert_to_predicate_column() {
         auto res = vectorized::PredicateColumnType<StringValue>::create();
-        res->reserve(codes.size());
-        for (size_t i = 0; i < codes.size(); ++i) {
+        size_t size = codes.size();
+        res->reserve(size);
+        for (size_t i = 0; i < size; ++i) {
             auto& code = reinterpret_cast<T&>(codes[i]);
-            auto* value = dict.get_value(code);
-            res->insert_data(value->ptr, value->len);
+            auto value = dict.get_value(code);
+            res->insert_data(value.ptr, value.len);
         }
         dict.clear();
         return res;
@@ -295,10 +296,7 @@ public:
     }
 
     void sort_dict() {
-        DictContainer new_dict;
-        dict.replicate(new_dict);
-        std::sort(new_dict.begin(), new_dict.end(), comparator);
-        dict.update_inverted_index_and_dict_data(new_dict);
+        dict.sort();
         dict_sorted = true;
     }
 
@@ -311,25 +309,17 @@ public:
             inverted_index.reserve(n);
         }
 
-        inline void insert_value(StringValue* value) {
-            dict_data.push_back_without_reserve(*value);
-            inverted_index[*value] = inverted_index.size();
+        inline void insert_value(StringValue& value) {
+            dict_data.push_back_without_reserve(value);
+            inverted_index[value] = inverted_index.size();
         }
 
         inline T get_code(const StringValue& value) const {
-            auto it = inverted_index.find(value);
-            if (it != inverted_index.end()) {
-                return it->second;
-            }
-            return -1;  // todo(zeno)
+            return inverted_index.find(value)->second;
         }
 
-        inline void get_codes(phmap::flat_hash_set<StringValue>& values) {
-            // todo(zeno)
-        }
-
-        inline StringValue* get_value(T code) {
-            return &dict_data[code];
+        inline StringValue& get_value(T code) {
+            return dict_data[code];
         }
 
         void clear() {
@@ -338,29 +328,17 @@ public:
             code_convert_map.clear();
         }
 
-        void update_inverted_index_and_dict_data(DictContainer& new_dict) {
-            for (size_t i = 0; i < new_dict.size(); ++i) {
-                code_convert_map[inverted_index.find(new_dict[i])->second] = (T)i;
-                inverted_index[new_dict[i]] = (T)i;
-            }
-            dict_data.clear();
-            dict_data.insert(new_dict.begin(), new_dict.end());
-        }
-
-        void replicate(DictContainer& new_dict) {
-            size_t size = dict_data.size();
-            new_dict.reserve(size);
-            for (size_t i = 0; i < size; ++i) {
-                new_dict.push_back_without_reserve(dict_data[i]);
+        void sort() {
+            size_t dict_size = dict_data.size();
+            std::sort(dict_data.begin(), dict_data.end(), comparator);
+            for (size_t i = 0; i < dict_size; ++i) {
+                code_convert_map[inverted_index.find(dict_data[i])->second] = (T)i;
+                inverted_index[dict_data[i]] = (T)i;
             }
         }
 
         inline T convert_code(const T& code) const {
-            auto it = code_convert_map.find(code);
-            if (it != code_convert_map.end()) {
-                return it->second;
-            }
-            return -1;  // todo(zeno)
+            return code_convert_map.find(code)->second;
         }
 
         size_t byte_size() {
@@ -374,16 +352,16 @@ public:
             }
         };
 
+        StringValue::Comparator comparator;
         // dict code -> dict value
         DictContainer dict_data;
         // dict value -> dict code
         phmap::flat_hash_map<StringValue, T, HashOfStringValue> inverted_index;
-        // data page code -> sorted dict code
+        // data page code -> sorted dict code, only used for range comparison predicate
         phmap::flat_hash_map<T, T> code_convert_map;
     };
 
 private:
-    StringValue::Comparator comparator;
     bool dict_inited = false;
     bool dict_sorted = false;
     bool dict_code_converted = false;

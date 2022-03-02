@@ -44,7 +44,7 @@ class VectorizedRowBatch;
         void evaluate_and(vectorized::IColumn& column, uint16_t* sel, uint16_t size, bool* flags) const override; \
         void evaluate_or(vectorized::IColumn& column, uint16_t* sel, uint16_t size, bool* flags) const override; \
         void evaluate_vec(vectorized::IColumn& column, uint16_t size, bool* flags) const override;\
-        bool is_range_comparision_predicate() override { return IS_RANGE; }                   \
+        bool is_range_comparison_predicate() override { return IS_RANGE; }                    \
     private:                                                                                  \
         type _value;                                                                          \
     };
