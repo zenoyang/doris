@@ -98,19 +98,20 @@ public:
     void insert_data(const T value) { codes.push_back(value); }
 
     void insert_default() override {
-        LOG(FATAL) << "insert_default not supported in ColumnDictionary";
+        codes.push_back(T());
     }
 
     void clear() override {
         codes.clear();
     }
 
-    [[noreturn]] size_t byte_size() const override {
-        LOG(FATAL) << "byte_size not supported in ColumnDictionary";
+    // TODO: Make dict memory usage more precise
+    size_t byte_size() const override {
+        return codes.size() * sizeof(codes[0]);
     }
 
-    [[noreturn]] size_t allocated_bytes() const override {
-        LOG(FATAL) << "allocated_bytes not supported in ColumnDictionary";
+    size_t allocated_bytes() const override {
+        return byte_size();
     }
 
     void protect() override {}
@@ -269,9 +270,8 @@ public:
     bool is_dict_code_converted() const { return dict_code_converted; }
 
     ColumnPtr convert_to_predicate_column() {
-        // todo(zeno) log clean
-        LOG(INFO) << "[zeno] ColumnDictionary::convert_to_predicate_column codes.size: " << codes.size();
         auto res = vectorized::PredicateColumnType<StringValue>::create();
+        res->reserve(codes.size());
         for (size_t i = 0; i < codes.size(); ++i) {
             auto& code = reinterpret_cast<T&>(codes[i]);
             auto* value = dict.get_value(code);
@@ -363,6 +363,10 @@ public:
             return -1;  // todo(zeno)
         }
 
+        size_t byte_size() {
+            return dict_data.size() * sizeof(dict_data[0]);
+        }
+
     private:
         struct HashOfStringValue {
             size_t operator()(const StringValue& value) const {
@@ -379,12 +383,12 @@ public:
     };
 
 private:
+    StringValue::Comparator comparator;
     bool dict_inited = false;
     bool dict_sorted = false;
     bool dict_code_converted = false;
     Dictionary dict;
     Container codes;
-    StringValue::Comparator comparator;
 };
 
 } // namespace
