@@ -714,6 +714,7 @@ Status SegmentIterator::_read_columns(const std::vector<ColumnId>& column_ids,
 
 void SegmentIterator::_init_current_block(
         vectorized::Block* block, std::vector<vectorized::MutableColumnPtr>& current_columns) {
+//    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[5]);    // InitCurBlockTime
     bool is_block_mem_reuse = block->mem_reuse();
     if (is_block_mem_reuse) {
         block->clear_column_data(_schema.num_column_ids());
@@ -760,6 +761,7 @@ void SegmentIterator::_init_current_block(
 }
 
 void SegmentIterator::_output_non_pred_columns(vectorized::Block* block, bool is_block_mem_reuse) {
+//    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[3]);    // OutputNonPredColTime
     for (auto cid : _non_predicate_columns) {
         block->replace_by_position(_schema_block_id_map[cid],
                                    std::move(_current_return_columns[cid]));
@@ -770,6 +772,7 @@ Status SegmentIterator::_output_column_by_sel_idx(vectorized::Block* block,
                                                   const std::vector<ColumnId>& columnIds,
                                                   uint16_t* sel_rowid_idx, uint16_t select_size,
                                                   bool is_block_mem_reuse) {
+//    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[2]);    // OutputColBySelIdxTime
     for (auto cid : columnIds) {
         int block_cid = _schema_block_id_map[cid];
         RETURN_IF_ERROR(block->copy_column_data_to_block(
@@ -781,6 +784,7 @@ Status SegmentIterator::_output_column_by_sel_idx(vectorized::Block* block,
 
 Status SegmentIterator::_read_columns_by_index(uint32_t nrows_read_limit, uint32_t& nrows_read,
                                                bool set_block_rowid) {
+    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[0]);    // ReadColByIdxTime
     do {
         uint32_t range_from;
         uint32_t range_to;
@@ -810,6 +814,7 @@ Status SegmentIterator::_read_columns_by_index(uint32_t nrows_read_limit, uint32
 
 void SegmentIterator::_evaluate_vectorization_predicate(uint16_t* sel_rowid_idx,
                                                         uint16_t& selected_size) {
+    SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
     if (_vec_pred_column_ids.empty()) {
         for (uint32_t i = 0; i < selected_size; ++i) {
             sel_rowid_idx[i] = i;
@@ -850,6 +855,7 @@ void SegmentIterator::_evaluate_vectorization_predicate(uint16_t* sel_rowid_idx,
 
 void SegmentIterator::_evaluate_short_circuit_predicate(uint16_t* vec_sel_rowid_idx,
                                                         uint16_t* selected_size_ptr) {
+    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[1]);    // ShortPredEvalTime
     if (_short_cir_pred_column_ids.empty()) {
         return;
     }
@@ -881,6 +887,7 @@ void SegmentIterator::_read_columns_by_rowids(std::vector<ColumnId>& read_column
                                               std::vector<rowid_t>& rowid_vector,
                                               uint16_t* sel_rowid_idx, size_t select_size,
                                               vectorized::MutableColumns* mutable_columns) {
+    SCOPED_RAW_TIMER(&_opts.stats->general_debug_ns[4]);    // ReadColByRowIdTime
     size_t start_idx = 0;
     while (start_idx < select_size) {
         size_t end_idx = start_idx + 1;
