@@ -64,17 +64,15 @@ public:
         return res;
     }
 
-    DataTypePtr get_return_type_for_equal(
-        const ColumnsWithTypeAndName& arguments) const {
-        
-        size_t num_full_ordinary_columns = 0;
-        ColumnsWithTypeAndName args_without_low_cardinality(arguments);
+    DataTypePtr get_return_type_for_equal(const ColumnsWithTypeAndName& arguments) const {
+        ColumnsWithTypeAndName args(arguments);
 
-        for (ColumnWithTypeAndName& arg : args_without_low_cardinality) {
+        for (ColumnWithTypeAndName& arg : args) {
             bool is_const = arg.column && is_column_const(*arg.column);
-            if (is_const)
-                arg.column = assert_cast<const ColumnConst&>(*arg.column).remove_low_cardinality();
-            if (!is_const) ++num_full_ordinary_columns;
+            if (is_const) {
+                arg.column =
+                        assert_cast<const ColumnConst&>(*arg.column).convert_to_full_column();
+            }
         }
         
         if (!arguments.empty()) {
