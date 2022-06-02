@@ -358,6 +358,7 @@ struct TOlapScanNode {
   5: optional string sort_column
   6: optional Types.TKeysType keyType
   7: optional string table_name
+  8: optional list<Types.TSlotId> output_slot_ids
 }
 
 struct TEqJoinCondition {

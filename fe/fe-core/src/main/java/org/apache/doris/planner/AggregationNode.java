@@ -24,7 +24,10 @@ import org.apache.doris.analysis.AggregateInfo;
 import org.apache.doris.analysis.Analyzer;
 import org.apache.doris.analysis.Expr;
 import org.apache.doris.analysis.FunctionCallExpr;
+import org.apache.doris.analysis.SlotDescriptor;
 import org.apache.doris.analysis.SlotId;
+import org.apache.doris.analysis.SlotRef;
+import org.apache.doris.analysis.TupleId;
 import org.apache.doris.common.NotImplementedException;
 import org.apache.doris.common.UserException;
 import org.apache.doris.common.util.VectorizedUtil;
@@ -44,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -178,6 +182,35 @@ public class AggregationNode extends PlanNode {
 
         // assert consistent aggregate expr and slot materialization
         // aggInfo.checkConsistency();
+
+        // ScanNode column prune temporary solution
+        if (this.children.size() > 0 && !this.aggInfo.isMerge()) {
+            Set<SlotId> requiredSlotIdSet = new HashSet<>();
+            for (TupleId tupleId : tupleIds) {
+                for (SlotDescriptor slotDescriptor : analyzer.getTupleDesc(tupleId).getSlots()) {
+                    getSlotIdFromExpr(requiredSlotIdSet, slotDescriptor.getSourceExprs());
+                }
+            }
+            PlanNode planNode = children.get(0);
+            OlapScanNode olapScanNode = (OlapScanNode) planNode;
+            olapScanNode.initOutputSlotIds(requiredSlotIdSet, analyzer);
+        }
+    }
+
+    private void getSlotIdFromExpr(Set<SlotId> slotIdSet, List<Expr> exprList) {
+        if (exprList == null || exprList.isEmpty()) {
+            return;
+        }
+        for (Expr expr : exprList) {
+            if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                slotIdSet.add(slotRef.getSlotId());
+            } else if (expr.getChildren().isEmpty()) {
+                continue;
+            } else {
+                getSlotIdFromExpr(slotIdSet, expr.getChildren());
+            }
+        }
     }
 
     @Override
@@ -326,4 +359,5 @@ public class AggregationNode extends PlanNode {
         result.addAll(aggregateSlotIds);
         return result;
     }
+
 }

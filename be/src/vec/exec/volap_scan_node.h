@@ -60,6 +60,8 @@ public:
                      std::vector<std::unique_ptr<OlapScanRange>>* sub_scan_range,
                      RuntimeProfile* profile);
 
+    void init_output_slots();
+
 private:
     // In order to ensure the accuracy of the query result
     // only key column conjuncts will be remove as idle conjunct
@@ -325,6 +327,10 @@ private:
     int _max_materialized_blocks;
 
     size_t _block_size = 0;
+
+    std::vector<SlotId> _output_slot_ids;
+
+    std::vector<bool> _output_slot_flags;
 };
 } // namespace vectorized
 } // namespace doris

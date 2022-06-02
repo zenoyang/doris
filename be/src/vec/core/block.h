@@ -229,6 +229,8 @@ public:
     // Else clear column [0, column_size) delete column [column_size, data.size)
     void clear_column_data(int column_size = -1) noexcept;
 
+    void clear_column_data_by_position(int position) noexcept;
+
     bool mem_reuse() { return !data.empty(); }
 
     bool is_empty_column() { return data.empty(); }

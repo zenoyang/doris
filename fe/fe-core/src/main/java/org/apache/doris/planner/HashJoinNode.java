@@ -780,14 +780,6 @@ public class HashJoinNode extends PlanNode {
             output.append(getRuntimeFilterExplainString(true));
         }
         output.append(detailPrefix).append(String.format("cardinality=%s", cardinality)).append("\n");
-        // todo unify in plan node
-        if (outputSlotIds != null) {
-            output.append(detailPrefix).append("output slot ids: ");
-            for (SlotId slotId : outputSlotIds) {
-                output.append(slotId).append(" ");
-            }
-            output.append("\n");
-        }
         if (hashOutputSlotIds != null) {
             output.append(detailPrefix).append("hash output slot ids: ");
             for (SlotId slotId : hashOutputSlotIds) {
@@ -795,6 +787,7 @@ public class HashJoinNode extends PlanNode {
             }
             output.append("\n");
         }
+        appendCommonExplainString(detailPrefix, output);
         return output.toString();
     }
 

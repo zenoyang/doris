@@ -577,6 +577,14 @@ void Block::clear_column_data(int column_size) noexcept {
     }
 }
 
+void Block::clear_column_data_by_position(int position) noexcept {
+    DCHECK(position < data.size());
+    DCHECK(data[position].column->use_count() == 1);
+    if (position < data.size()) {
+        (*std::move(data[position].column)).assume_mutable()->clear();
+    }
+}
+
 void Block::swap(Block& other) noexcept {
     std::swap(info, other.info);
     data.swap(other.data);
