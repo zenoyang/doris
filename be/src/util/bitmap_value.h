@@ -18,6 +18,7 @@
 #pragma once
 
 #include <parallel_hashmap/btree.h>
+#include <parallel_hashmap/phmap.h>
 
 #include <algorithm>
 #include <cstdarg>
@@ -129,6 +130,9 @@ public:
     Roaring64Map(const Roaring64Map& r) : roarings(r.roarings), copyOnWrite(r.copyOnWrite) {}
 
     Roaring64Map(Roaring64Map&& r) : roarings(r.roarings), copyOnWrite(r.copyOnWrite) {}
+
+    Roaring64Map(phmap::btree_map<uint32_t, roaring::Roaring>& r, bool cow)
+            : roarings(std::move(r)), copyOnWrite(cow) {}
 
     /**
      * Assignment operator.
@@ -903,12 +907,33 @@ public:
      * pointer).
      */
     static Roaring64Map fastunion(size_t n, const Roaring64Map** inputs) {
-        Roaring64Map ans;
-        // not particularly fast
-        for (size_t lcv = 0; lcv < n; ++lcv) {
-            ans |= *(inputs[lcv]);
+        // Roaring64Map ans;
+        // // not particularly fast
+        // for (size_t lcv = 0; lcv < n; ++lcv) {
+        //     ans |= *(inputs[lcv]);
+        // }
+        // return ans;
+
+        phmap::flat_hash_map<uint32_t, std::vector<const roaring::Roaring*>> map;
+        for (int i = 0; i < n; ++i) {
+            for (const auto& entry : inputs[i]->roarings) {
+                auto iter = map.find(entry.first);
+                if (iter == map.end()) {
+                    std::vector<const roaring::Roaring*> values;
+                    values.emplace_back(&entry.second);
+                    map.emplace(entry.first, std::move(values));
+                } else {
+                    iter->second.emplace_back(&entry.second);
+                }
+            }
         }
-        return ans;
+
+        phmap::btree_map<uint32_t, roaring::Roaring> data;
+        for (auto& entry : map) {
+            auto res = roaring::Roaring::fastunion(entry.second.size(), entry.second.data());
+            data.emplace(entry.first, std::move(res));
+        }
+        return {data, false};
     }
 
     friend class Roaring64MapSetBitForwardIterator;
@@ -1259,6 +1284,54 @@ public:
             }
             break;
         }
+        return *this;
+    }
+
+    BitmapValue& fastunion(std::vector<BitmapValue>& values) {
+        std::vector<const detail::Roaring64Map*> bitmaps;
+        std::vector<uint64_t> single_values;
+        for (int i = 0; i < values.size(); ++i) {
+            auto& value = values[i];
+            switch (value._type) {
+            case EMPTY:
+                break;
+            case SINGLE:
+                single_values.push_back(value._sv);
+                break;
+            case BITMAP:
+                bitmaps.push_back(&value._bitmap);
+                break;
+            }
+        }
+
+        if (!bitmaps.empty()) {
+            switch (_type) {
+            case EMPTY:
+                _bitmap = detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data());
+                _type = BITMAP;
+                break;
+            case SINGLE:
+                _bitmap = detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data());
+                _bitmap.add(_sv);
+                _type = BITMAP;
+                break;
+            case BITMAP:
+                _bitmap |= detail::Roaring64Map::fastunion(bitmaps.size(), bitmaps.data());
+                break;
+            }
+        }
+
+        if (_type == EMPTY && single_values.size() == 1) {
+            _sv = single_values[0];
+            _type = SINGLE;
+        } else if (!single_values.empty()) {
+            _bitmap.addMany(single_values.size(), single_values.data());
+            if (_type == SINGLE) {
+                _bitmap.add(_sv);
+            }
+            _type = BITMAP;
+        }
+
         return *this;
     }
 
