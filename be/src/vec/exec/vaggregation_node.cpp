@@ -338,7 +338,7 @@ Status AggregationNode::prepare_profile(RuntimeState* state) {
     _get_results_timer = ADD_TIMER(runtime_profile(), "GetResultsTime");
     _serialize_data_timer = ADD_TIMER(runtime_profile(), "SerializeDataTime");
     _serialize_result_timer = ADD_TIMER(runtime_profile(), "SerializeResultTime");
-    _deserialize_data_timer = ADD_TIMER(runtime_profile(), "DeserializeDataTime");
+    _deserialize_data_timer = ADD_TIMER(runtime_profile(), "DeserializeAndMergeTime");
     _hash_table_compute_timer = ADD_TIMER(runtime_profile(), "HashTableComputeTime");
     _hash_table_iterate_timer = ADD_TIMER(runtime_profile(), "HashTableIterateTime");
     _insert_keys_to_column_timer = ADD_TIMER(runtime_profile(), "InsertKeysToColumnTime");
@@ -780,9 +780,13 @@ Status AggregationNode::_merge_without_key(Block* block) {
                     VectorBufferReader buffer_reader(
                             ((ColumnString*)(column.get()))->get_data_at(j));
 
+                    char deserialized_data[_aggregate_evaluators[i]->function()->size_of_data()];
+                    AggregateDataPtr deserialized_place = (AggregateDataPtr)deserialized_data;
+                    _aggregate_evaluators[i]->function()->create(deserialized_place);
+                    DEFER({ _aggregate_evaluators[i]->function()->destroy(deserialized_place); });
                     _aggregate_evaluators[i]->function()->deserialize_and_merge(
-                            _agg_data->without_key + _offsets_of_aggregate_states[i], buffer_reader,
-                            _agg_arena_pool.get());
+                            _agg_data->without_key + _offsets_of_aggregate_states[i],
+                            deserialized_place, buffer_reader, _agg_arena_pool.get());
                 }
             }
         } else {

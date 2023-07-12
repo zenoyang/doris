@@ -1117,25 +1117,15 @@ private:
                         _deserialize_buffer.resize(buffer_size);
                     }
 
-                    if (_use_fixed_length_serialization_opt) {
+                    {
                         SCOPED_TIMER(_deserialize_data_timer);
-                        _aggregate_evaluators[i]->function()->deserialize_from_column(
-                                _deserialize_buffer.data(), *column, _agg_arena_pool.get(), rows);
-                    } else {
-                        SCOPED_TIMER(_deserialize_data_timer);
-                        _aggregate_evaluators[i]->function()->deserialize_vec(
+                        _aggregate_evaluators[i]->function()->deserialize_and_merge_vec_selected(
+                                _places.data(), _offsets_of_aggregate_states[i],
                                 _deserialize_buffer.data(), (ColumnString*)(column.get()),
                                 _agg_arena_pool.get(), rows);
-                    }
-
-                    DEFER({
                         _aggregate_evaluators[i]->function()->destroy_vec(
                                 _deserialize_buffer.data(), rows);
-                    });
-
-                    _aggregate_evaluators[i]->function()->merge_vec_selected(
-                            _places.data(), _offsets_of_aggregate_states[i],
-                            _deserialize_buffer.data(), _agg_arena_pool.get(), rows);
+                    }
                 } else {
                     RETURN_IF_ERROR(_aggregate_evaluators[i]->execute_batch_add_selected(
                             block, _offsets_of_aggregate_states[i], _places.data(),
@@ -1164,25 +1154,13 @@ private:
                         _deserialize_buffer.resize(buffer_size);
                     }
 
-                    if (_use_fixed_length_serialization_opt) {
+                    {
                         SCOPED_TIMER(_deserialize_data_timer);
-                        _aggregate_evaluators[i]->function()->deserialize_from_column(
-                                _deserialize_buffer.data(), *column, _agg_arena_pool.get(), rows);
-                    } else {
-                        SCOPED_TIMER(_deserialize_data_timer);
-                        _aggregate_evaluators[i]->function()->deserialize_vec(
+                        _aggregate_evaluators[i]->function()->deserialize_and_merge_vec(
+                                _places.data(), _offsets_of_aggregate_states[i],
                                 _deserialize_buffer.data(), (ColumnString*)(column.get()),
                                 _agg_arena_pool.get(), rows);
                     }
-
-                    DEFER({
-                        _aggregate_evaluators[i]->function()->destroy_vec(
-                                _deserialize_buffer.data(), rows);
-                    });
-
-                    _aggregate_evaluators[i]->function()->merge_vec(
-                            _places.data(), _offsets_of_aggregate_states[i],
-                            _deserialize_buffer.data(), _agg_arena_pool.get(), rows);
                 } else {
                     RETURN_IF_ERROR(_aggregate_evaluators[i]->execute_batch_add(
                             block, _offsets_of_aggregate_states[i], _places.data(),
